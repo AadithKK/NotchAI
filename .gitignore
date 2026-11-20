@@ -1,0 +1,11 @@
+.build/
+build/
+*.xcuserstate
+.DS_Store
+
+# Local scratch and agent hand-off notes (contain personal paths); not part of the release
+work/
+tasks/
+docs/CONTINUATION_PROMPT.md
+docs/PROGRESS.md
+docs/renders/island-full.png

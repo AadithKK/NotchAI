@@ -39,7 +39,7 @@ Chat, browse, drop in documents, or screenshot your screen and get the answer: a
 You need an Apple Silicon Mac on **macOS 15+** and **Xcode 16+** (Swift 6). No other dependencies.
 
 ```bash
-git clone https://github.com/<your-username>/NotchAI.git
+git clone https://github.com/AadithKK/NotchAI.git
 cd NotchAI
 ./scripts/build-app.sh      # builds, signs and installs ~/Applications/NotchAI.app
 open ~/Applications/NotchAI.app

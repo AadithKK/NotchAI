@@ -11,6 +11,16 @@
 <p align="center"><b>Hover your MacBook's notch and a Dynamic-Island-style AI assistant grows out of it.</b><br>
 Chat, browse, drop in documents, or screenshot your screen and get the answer: all without leaving the app you're in.</p>
 
+<p align="center"><img src="docs/concept.webp" alt="Concept render of the NotchAI island hanging from a MacBook notch" width="85%"><br><sub><i>Concept render (AI-generated illustration, not a screenshot).</i></sub></p>
+
+<p align="center">
+  <a href="#quick-start"><b>Quick start</b></a> ·
+  <a href="#what-it-does"><b>Features</b></a> ·
+  <a href="#capture--answer-in-60-seconds"><b>Capture &amp; Answer</b></a> ·
+  <a href="#shortcuts"><b>Shortcuts</b></a> ·
+  <a href="#faq"><b>FAQ</b></a>
+</p>
+
 ---
 
 ## What it does
@@ -46,6 +56,23 @@ Then, once:
 
 > **Signing note.** `build-app.sh` signs with your Apple Development identity when you have one, so the Screen Recording permission survives rebuilds. Without one it falls back to ad-hoc signing and macOS asks for the permission again after every rebuild.
 
+## Capture & Answer in 60 seconds
+
+Study, research, or just stuck on something on screen? One shortcut does the whole loop:
+
+```mermaid
+flowchart LR
+    A["Press ⌃⌥⌘5"] --> B["Screenshot of your screen<br/>(NotchAI never captures itself)"]
+    B --> C["Sent to your model<br/>with your own API key"]
+    C --> D{"Multiple choice?"}
+    D -- Yes --> E["Big answer letter pops up<br/>beside the notch for 3 s"]
+    D -- No --> F["Chat opens with the full answer,<br/>tucks away after 20 idle s"]
+    E --> G[("Saved to your one<br/>Quick Answers chat")]
+    F --> G
+```
+
+Nothing is sent until you press the shortcut, and only that one screenshot goes out.
+
 ## Shortcuts
 
 | Shortcut | Action |
@@ -72,6 +99,28 @@ The island is opaque black so it reads as the same material as the camera housin
 swift build        # debug build
 swift test         # unit tests
 ```
+
+## FAQ
+
+<details><summary><b>Do I have to pay for anything?</b></summary>
+NotchAI is free and open source. You use your own DeepSeek or Gemini key, so any usage is billed by that provider (both have free or very cheap tiers).
+</details>
+
+<details><summary><b>Where does my API key go?</b></summary>
+Only into the macOS Keychain on your Mac, and then straight to the provider you chose. It is never written to a file, logged, or committed. The repository contains no keys.
+</details>
+
+<details><summary><b>Why does macOS ask for Screen Recording?</b></summary>
+Screenshots use Apple's ScreenCaptureKit, which requires that permission. NotchAI excludes its own windows from every capture and does not try to get around macOS protections.
+</details>
+
+<details><summary><b>Can I download a ready-made app?</b></summary>
+Not yet. Builds are made from source so they are signed with your own certificate; the Quick start above is one command.
+</details>
+
+<details><summary><b>Which models can read screenshots?</b></summary>
+The model picker marks vision-capable models. Text-only models are refused for screenshots instead of silently switching.
+</details>
 
 ## Architecture
 ```

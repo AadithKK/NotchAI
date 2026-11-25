@@ -32,35 +32,83 @@ struct DoubleTapDetector {
     }
 }
 
-/// Global key listener for the double-tap shortcuts. Needs the Input Monitoring permission; it only
-/// sees keys pressed in other apps (typing inside NotchAI never reaches it).
+/// Global key listener for the double-tap shortcuts, built on a listen-only CGEventTap, which needs
+/// exactly the Input Monitoring permission and nothing else. Until that permission is granted it
+/// retries every two seconds, so allowing it works immediately, with no relaunch.
 @MainActor
 final class DoubleTapMonitor {
-    private var monitor: Any?
+    private var tap: CFMachPort?
+    private var source: CFRunLoopSource?
+    private var retry: Timer?
     private var detector = DoubleTapDetector()
     private var onTrigger: ((String) -> Void)?
+    private var askedForPermission = false
 
-    var isInstalled: Bool { monitor != nil }
+    var isInstalled: Bool { tap != nil }
     static var hasPermission: Bool { CGPreflightListenEventAccess() }
 
     func setEnabled(_ enabled: Bool, onTrigger: @escaping (String) -> Void) {
         self.onTrigger = onTrigger
-        if enabled, monitor == nil {
-            if !Self.hasPermission { _ = CGRequestListenEventAccess() }
-            detector = DoubleTapDetector()
-            monitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                MainActor.assumeIsolated { self?.handle(event) }
-            }
-        } else if !enabled, let monitor {
-            NSEvent.removeMonitor(monitor)
-            self.monitor = nil
+        if enabled {
+            guard tap == nil else { return }
+            if !install() { startRetrying() }
+        } else {
+            retry?.invalidate(); retry = nil
+            if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
+            if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+            tap = nil; source = nil
         }
     }
 
-    private func handle(_ event: NSEvent) {
-        // Held keys repeat, and chords (⌘H etc.) are never a double-tap.
-        guard !event.isARepeat, event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
-              let key = event.charactersIgnoringModifiers?.lowercased(), key.count == 1 else { return }
-        if let fired = detector.ingest(key, now: event.timestamp) { onTrigger?(fired) }
+    private func startRetrying() {
+        guard retry == nil else { return }
+        retry = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.tap == nil else { return }
+                if self.install() { self.retry?.invalidate(); self.retry = nil }
+            }
+        }
+    }
+
+    private func install() -> Bool {
+        if !Self.hasPermission {
+            if !askedForPermission { askedForPermission = true; _ = CGRequestListenEventAccess() }
+            return false
+        }
+        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        let callback: CGEventTapCallBack = { _, type, event, refcon in
+            guard let refcon else { return Unmanaged.passUnretained(event) }
+            let monitor = Unmanaged<DoubleTapMonitor>.fromOpaque(refcon).takeUnretainedValue()
+            MainActor.assumeIsolated { monitor.handle(type: type, event: event) }
+            return Unmanaged.passUnretained(event) // listen-only: never swallow or alter keys
+        }
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
+            eventsOfInterest: mask, callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) else { return false }
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        self.tap = tap
+        self.source = source
+        detector = DoubleTapDetector()
+        Log.app.info("double-tap key listener installed")
+        return true
+    }
+
+    private func handle(type: CGEventType, event: CGEvent) {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            return
+        }
+        guard type == .keyDown,
+              event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
+              event.flags.isDisjoint(with: [.maskCommand, .maskControl, .maskAlternate]),
+              !NSApp.isActive, // typing inside NotchAI itself is never a shortcut
+              let key = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased(), key.count == 1 else { return }
+        if let fired = detector.ingest(key, now: ProcessInfo.processInfo.systemUptime) {
+            Log.app.info("double-tap fired: \(fired, privacy: .public)")
+            onTrigger?(fired)
+        }
     }
 }

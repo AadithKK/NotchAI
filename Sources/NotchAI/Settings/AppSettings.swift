@@ -180,9 +180,11 @@ struct ScreenshotSettings: Codable, Equatable, Sendable {
     var answerShortcut: KeyboardShortcut?
     var answerShortcutEnabled: Bool?
     var answerMode: AnswerMode?
-    /// Fast double-tap "hh" (answer) and "jj" (Watch Region). Off by default: it needs Input Monitoring.
-    var doubleTapKeysEnabled: Bool?
-    var isDoubleTapEnabled: Bool { doubleTapKeysEnabled ?? false }
+    /// Fast double-tap "hh" (answer) and "jj" (Watch Region). On unless the user turned it off; the
+    /// listener waits quietly until Input Monitoring is allowed.
+    var doubleTapKeysEnabled: Bool?   // legacy v1.1 field, ignored
+    var doubleTapKeysOff: Bool?
+    var isDoubleTapEnabled: Bool { !(doubleTapKeysOff ?? false) }
     var effectiveAnswerMode: AnswerMode { answerMode ?? .auto }
     var effectiveAnswerShortcut: KeyboardShortcut { answerShortcut ?? .defaultAnswer }
     var isAnswerShortcutEnabled: Bool { answerShortcutEnabled ?? true }

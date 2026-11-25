@@ -38,6 +38,8 @@ final class SettingsStore: ObservableObject {
     private func persist() {
         guard let data = try? JSONEncoder().encode(settings) else { return }
         defaults.set(data, forKey: Self.storageKey)
+        // macOS may kill the app right after a permission grant; flush so the change survives it.
+        defaults.synchronize()
     }
 
     func refreshKeyPresence() {

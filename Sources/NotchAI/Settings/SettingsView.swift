@@ -316,7 +316,7 @@ private struct ScreenshotSettingsView: View {
                 .pickerStyle(.segmented)
                 Text("MCQ shows only the answer letter beside the notch. FRQ always opens a full written answer. Auto picks for you.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Watch Region (⌃⌥⌘6): drag a box around the question area. Whenever it changes and settles, NotchAI captures just that box and answers it, until you press ⌃⌥⌘6 again. Starting it is your permission to send those captures to your selected AI model; each one is billed to your API key.")
+                Text("Watch Region (⌃⌥⌘6 or jj): the first time, your screen freezes and you drag a box around the question area. From then on, whenever that box changes and settles, NotchAI captures just it and answers, until you press the shortcut again. Press it once more to resume the same box; menu bar → Choose New Watch Region… picks a different one. Starting it is your permission to send those captures to your selected AI model; each one is billed to your API key.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Double-tap keys") {

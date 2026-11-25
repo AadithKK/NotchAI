@@ -13,6 +13,8 @@ private final class PickerPanel: NSPanel {
 
 private final class PickerView: NSView {
     var mode: AnswerMode
+    /// Frozen screenshot of the whole screen, drawn under the dimming so the user picks on a still image.
+    var background: NSImage?
     var onFinish: (CGRect?, AnswerMode) -> Void = { _, _ in }
     private var start: CGPoint?
     private var current: CGPoint?
@@ -59,6 +61,7 @@ private final class PickerView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        background?.draw(in: bounds)
         let dim = NSBezierPath(rect: bounds)
         if let selection { dim.append(NSBezierPath(rect: selection)); dim.windingRule = .evenOdd }
         NSColor.black.withAlphaComponent(0.35).setFill()
@@ -86,9 +89,11 @@ private final class PickerView: NSView {
 enum RegionPicker {
     private static var panel: PickerPanel?
 
-    static func pick(mode: AnswerMode) async -> PickedRegion? {
-        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
-        guard let screen else { return nil }
+    static func screenUnderPointer() -> NSScreen? {
+        NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+    }
+
+    static func pick(mode: AnswerMode, on screen: NSScreen, background: NSImage? = nil) async -> PickedRegion? {
         let previousApp = NSWorkspace.shared.frontmostApplication
         return await withCheckedContinuation { continuation in
             let panel = PickerPanel(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -98,6 +103,7 @@ enum RegionPicker {
             panel.hasShadow = false
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             let view = PickerView(frame: NSRect(origin: .zero, size: screen.frame.size), mode: mode)
+            view.background = background
             view.onFinish = { rect, chosenMode in
                 panel.orderOut(nil)
                 Self.panel = nil

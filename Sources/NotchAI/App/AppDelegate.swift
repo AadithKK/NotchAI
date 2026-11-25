@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var watchMenuItem: NSMenuItem?
     private var watchRegistered = false
     private var consecutiveWatchFailures = 0
+    /// The last chosen region, kept so toggling Watch Region back on needs no new selection.
+    private var savedWatchTarget: WatchTarget?
 
     private var islandController: IslandWindowController?
     private var settingsWindowController: SettingsWindowController?
@@ -350,11 +352,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Watch Region
 
-    /// One shortcut: pick a region, then every time it changes and settles it is captured and answered.
-    /// Starting is the consent; it keeps sending until stopped (same shortcut, menu, sleep or quit).
+    /// First press: freeze the screen, pick the question area, start watching. Press again to stop;
+    /// press once more to resume the same area without picking again (Choose New Region resets it).
     private func toggleWatch() {
         if regionWatcher.isWatching {
-            stopWatching(toast: "Stopped watching.")
+            stopWatching(toast: "Stopped watching. Press again to resume.")
             return
         }
         guard !quickAnswerInFlight, !captureInFlight else { return }
@@ -372,18 +374,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showWatchToast("Add your \(model.provider.displayName) API key in Settings first.")
             return
         }
-        Task { @MainActor in await beginWatching() }
+        if let saved = savedWatchTarget {
+            let front = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+            Task { @MainActor in await startWatching(saved, watchedPID: front) }
+        } else {
+            Task { @MainActor in await pickAndWatch() }
+        }
     }
 
-    private func beginWatching() async {
-        let startMode = settingsStore.settings.screenshot.effectiveAnswerMode
-        guard let picked = await RegionPicker.pick(mode: startMode) else { return }
-        guard let number = picked.screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return }
+    @objc private func chooseNewWatchRegionAction() {
+        stopWatching(toast: nil)
+        savedWatchTarget = nil
+        toggleWatch()
+    }
+
+    private func pickAndWatch() async {
+        guard let screen = RegionPicker.screenUnderPointer(),
+              let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return }
+        // Freeze the whole screen first (our own windows excluded) so the user drags on a still image.
+        var frozen: NSImage?
+        if let shot = try? await screenshotService.capture(
+            options: CaptureOptions(displayID: number.uint32Value, excludeAllAppWindows: true, includeCursor: false, format: .png, saveLocally: false),
+            islandWindowNumber: islandController?.windowNumber ?? 0,
+            additionalWindowNumbers: islandController?.additionalCaptureWindowNumbers ?? []
+        ) {
+            frozen = NSImage(contentsOf: shot.fileURL)
+            try? FileManager.default.removeItem(at: shot.fileURL)
+        }
+        guard let picked = await RegionPicker.pick(
+            mode: settingsStore.settings.screenshot.effectiveAnswerMode, on: screen, background: frozen
+        ) else { return }
         let target = WatchTarget(
             displayID: number.uint32Value,
             rect: RegionGeometry.displayLocal(rect: picked.rect, screenFrame: picked.screen.frame),
             mode: picked.mode
         )
+        savedWatchTarget = target
+        await startWatching(target, watchedPID: picked.previousApp?.processIdentifier ?? 0)
+    }
+
+    private func startWatching(_ target: WatchTarget, watchedPID: pid_t) async {
         do {
             let filter = try await screenshotService.makeWatchFilter(
                 displayID: target.displayID,
@@ -394,7 +424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             regionWatcher.start(
                 target: target,
                 filter: filter,
-                watchedPID: picked.previousApp?.processIdentifier ?? 0,
+                watchedPID: watchedPID,
                 isBusy: { [weak self] in
                     guard let self else { return true }
                     return self.quickAnswerInFlight || self.captureInFlight
@@ -412,12 +442,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 },
                 onError: { [weak self] error in
-                    self?.stopWatching(toast: "Stopped watching: \(error.localizedDescription)")
+                    self?.stopWatching(toast: "Stopped watching: \(error.localizedDescription). Use Choose New Watch Region… if your screen changed.")
                 }
             )
             islandController?.setWatchBadge("Watch · \(target.mode.title)")
             watchMenuItem?.title = "Stop Watching"
-            showWatchToast("Watching for changes (\(target.mode.title)). Press ⌃⌥⌘6 to stop.")
+            showWatchToast("Watching (\(target.mode.title)). Press jj or ⌃⌥⌘6 to stop.")
         } catch {
             showWatchToast(error.localizedDescription)
         }
@@ -565,6 +595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addItem(to: menu, title: "Capture Screen", action: #selector(captureFromMenuAction))
         addItem(to: menu, title: "Watch Region…", action: #selector(toggleWatchAction))
         watchMenuItem = menu.items.last
+        addItem(to: menu, title: "Choose New Watch Region…", action: #selector(chooseNewWatchRegionAction))
         menu.addItem(.separator())
         addItem(to: menu, title: "Settings…", action: #selector(openSettingsAction), keyEquivalent: ",")
         menu.addItem(.separator())

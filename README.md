@@ -29,7 +29,7 @@ Chat, browse, drop in documents, or screenshot your screen and get the answer: a
 |---|---|
 | **Notch island** | A solid-black island that joins the camera housing, grows out of it on hover, and closes when you move away. Pin keeps it open, Esc collapses it. Works on notchless and external displays too. |
 | **Capture & Answer** | Press **⌃⌥⌘5**. NotchAI screenshots your screen (never itself) and asks your model. **Multiple-choice questions show just the answer letter** beside the notch for 3 seconds. Longer questions pop the chat open, then it tucks away after 20 idle seconds. Every capture lands in one shared **Quick Answers** chat. |
-| **Watch Region** | Press **⌃⌥⌘6**, drag a box around the question area, and pick **MCQ** or **FRQ** (Tab switches). From then on, whenever that area changes and settles, NotchAI captures just that box and answers: **MCQ** shows only the letter, **FRQ** opens a full written answer. Press ⌃⌥⌘6 again to stop. |
+| **Watch Region** | Press **⌃⌥⌘6** (or **jj**): your screen freezes, you drag a box around the question area, and pick **MCQ** or **FRQ** (Tab switches). It starts right away. From then on, whenever that area changes and settles, NotchAI captures just that box and answers: **MCQ** shows only the letter, **FRQ** opens a full written answer. Press the shortcut again to stop, and once more to resume the same box with no re-selecting. |
 | **Chat with documents** | Attach PDFs, Word files, RTF, text or code with the paperclip or by dragging them in. Text is extracted on your Mac and sent only when you press Send. |
 | **Mini browser** | Tabs, search, history, and a detachable window. |
 | **Bring your own key** | DeepSeek and Google Gemini. Paste a key once; it lives in the macOS Keychain and never touches a file. |
@@ -86,7 +86,7 @@ Watch Region sends a capture of your chosen box to your AI provider **every time
 | **⌃⌥⌘4** | Capture the screen into the chat |
 | **⌃⌥⌘5** | Capture & Answer |
 | **⌃⌥⌘6** | Start or stop Watch Region |
-| **h h** (fast) | Capture & Answer, if you enable double-tap keys in Settings |
+| **h h** (fast) | Capture & Answer of your whole screen, if you enable double-tap keys in Settings |
 | **j j** (fast) | Start or stop Watch Region, same setting |
 | **Esc** | Collapse |
 | **⌘Return** | Send |

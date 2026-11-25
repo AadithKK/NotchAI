@@ -319,6 +319,18 @@ private struct ScreenshotSettingsView: View {
                 Text("Watch Region (⌃⌥⌘6): drag a box around the question area. Whenever it changes and settles, NotchAI captures just that box and answers it, until you press ⌃⌥⌘6 again. Starting it is your permission to send those captures to your selected AI model; each one is billed to your API key.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Double-tap keys") {
+                Toggle("Fast double-tap: hh = answer, jj = Watch Region on/off", isOn: Binding(
+                    get: { settingsStore.settings.screenshot.isDoubleTapEnabled },
+                    set: { settingsStore.settings.screenshot.doubleTapKeysEnabled = $0 }
+                ))
+                Text("Press the letter twice very fast (under a quarter second) after a short pause. Typing slower, or inside words like “ahh”, does nothing. Needs Input Monitoring: NotchAI only compares those two letters and never records or sends what you type. The letters are still typed into the app in front, so use it where that is harmless. If it does nothing after you allow the permission, quit and reopen NotchAI.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if settingsStore.settings.screenshot.isDoubleTapEnabled && !DoubleTapMonitor.hasPermission {
+                    Text("Input Monitoring is not allowed yet. Open System Settings → Privacy & Security → Input Monitoring and enable NotchAI.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            }
             Section("Screen Recording permission") {
                 HStack(spacing: 10) {
                     Label(

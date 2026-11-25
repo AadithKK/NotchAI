@@ -86,6 +86,8 @@ Watch Region sends a capture of your chosen box to your AI provider **every time
 | **⌃⌥⌘4** | Capture the screen into the chat |
 | **⌃⌥⌘5** | Capture & Answer |
 | **⌃⌥⌘6** | Start or stop Watch Region |
+| **h h** (fast) | Capture & Answer, if you enable double-tap keys in Settings |
+| **j j** (fast) | Start or stop Watch Region, same setting |
 | **Esc** | Collapse |
 | **⌘Return** | Send |
 

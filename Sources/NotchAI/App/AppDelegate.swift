@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let answerShortcutManager = ShortcutManager(identifier: 2)
     private let watchShortcutManager = ShortcutManager(identifier: 3)
     private let regionWatcher = RegionWatcher()
+    private let doubleTapMonitor = DoubleTapMonitor()
     private var watchMenuItem: NSMenuItem?
     private var watchRegistered = false
     private var consecutiveWatchFailures = 0
@@ -457,6 +458,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browserManagerInstance?.searchEngine = settings.browser.searchEngine
         browserManagerInstance?.homepage = settings.browser.homepage
         registerShortcutsIfNeeded(settings.screenshot)
+        doubleTapMonitor.setEnabled(settings.screenshot.isDoubleTapEnabled) { [weak self] key in
+            if key == "h" { self?.captureAndAnswer() } else if key == "j" { self?.toggleWatch() }
+        }
         islandController?.reposition()
     }
 

@@ -55,4 +55,26 @@ final class RegionWatcherTests: XCTestCase {
         XCTAssertTrue(AnswerMode.mcq.prompt.contains("ONLY the letter"))
         XCTAssertEqual(AnswerMode.frq.next, .auto)
     }
+
+    func testDoubleTapNeedsSpeedAndAPauseBeforeIt() {
+        var d = DoubleTapDetector()
+        XCTAssertNil(d.ingest("h", now: 10.0))
+        XCTAssertEqual(d.ingest("h", now: 10.15), "h")               // fast pair after a pause
+        XCTAssertNil(d.ingest("h", now: 10.25))                       // locked out: no "hhh" refire
+
+        var slow = DoubleTapDetector()
+        XCTAssertNil(slow.ingest("j", now: 20.0))
+        XCTAssertNil(slow.ingest("j", now: 20.5))                     // too slow
+
+        var word = DoubleTapDetector()
+        XCTAssertNil(word.ingest("a", now: 30.0))
+        XCTAssertNil(word.ingest("h", now: 30.1))                     // "ahh": h follows another key closely
+        XCTAssertNil(word.ingest("h", now: 30.2))
+
+        var other = DoubleTapDetector()
+        XCTAssertNil(other.ingest("k", now: 40.0))
+        XCTAssertNil(other.ingest("k", now: 40.1))                    // not a trigger letter
+        XCTAssertNil(other.ingest("h", now: 50.0))
+        XCTAssertEqual(other.ingest("h", now: 50.1), "h")
+    }
 }

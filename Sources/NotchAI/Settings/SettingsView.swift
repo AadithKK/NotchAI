@@ -304,6 +304,21 @@ private struct ScreenshotSettingsView: View {
                         .font(.caption).foregroundStyle(.orange)
                 }
             }
+            Section("Question mode & Watch Region") {
+                Picker("Question type", selection: Binding(
+                    get: { settingsStore.settings.screenshot.effectiveAnswerMode },
+                    set: { settingsStore.settings.screenshot.answerMode = $0 }
+                )) {
+                    Text("Auto").tag(AnswerMode.auto)
+                    Text("MCQ").tag(AnswerMode.mcq)
+                    Text("FRQ").tag(AnswerMode.frq)
+                }
+                .pickerStyle(.segmented)
+                Text("MCQ shows only the answer letter beside the notch. FRQ always opens a full written answer. Auto picks for you.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Watch Region (⌃⌥⌘6): drag a box around the question area. Whenever it changes and settles, NotchAI captures just that box and answers it, until you press ⌃⌥⌘6 again. Starting it is your permission to send those captures to your selected AI model; each one is billed to your API key.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Screen Recording permission") {
                 HStack(spacing: 10) {
                     Label(

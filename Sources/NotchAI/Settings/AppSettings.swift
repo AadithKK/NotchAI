@@ -71,6 +71,12 @@ struct KeyboardShortcut: Codable, Equatable, Sendable {
         modifiers: controlModifier | optionModifier | commandModifier
     )
 
+    /// ⌃⌥⌘6 (key code 22 is the 6 key): start or stop Watch Region.
+    static let defaultWatch = KeyboardShortcut(
+        keyCode: 22,
+        modifiers: controlModifier | optionModifier | commandModifier
+    )
+
     static let defaultAnswer = KeyboardShortcut(
         keyCode: 23,
         modifiers: controlModifier | optionModifier | commandModifier
@@ -132,6 +138,37 @@ struct KeyboardShortcut: Codable, Equatable, Sendable {
     }
 }
 
+/// What kind of question Capture & Answer and Watch Region expect.
+enum AnswerMode: String, Codable, CaseIterable, Sendable {
+    /// The model decides: a bare letter for multiple choice, a full answer otherwise.
+    case auto
+    /// Multiple choice: reply with only the option letter.
+    case mcq
+    /// Free response: always a full written answer.
+    case frq
+
+    var title: String {
+        switch self {
+        case .auto: return "Auto"
+        case .mcq: return "MCQ"
+        case .frq: return "FRQ"
+        }
+    }
+
+    var next: AnswerMode {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
+
+    var prompt: String {
+        switch self {
+        case .auto: return AnswerLetterParser.quickAnswerPrompt
+        case .mcq: return "Answer this multiple-choice question. Reply with ONLY the letter of the correct option (e.g. B) and nothing else."
+        case .frq: return "Answer this free-response question in full, in clear well-organized paragraphs."
+        }
+    }
+}
+
 struct ScreenshotSettings: Codable, Equatable, Sendable {
     var displayID: UInt32?
     var format: ScreenshotFormat = .png
@@ -142,6 +179,8 @@ struct ScreenshotSettings: Codable, Equatable, Sendable {
     // Optional stored fields preserve decoding of settings written by older versions.
     var answerShortcut: KeyboardShortcut?
     var answerShortcutEnabled: Bool?
+    var answerMode: AnswerMode?
+    var effectiveAnswerMode: AnswerMode { answerMode ?? .auto }
     var effectiveAnswerShortcut: KeyboardShortcut { answerShortcut ?? .defaultAnswer }
     var isAnswerShortcutEnabled: Bool { answerShortcutEnabled ?? true }
 }

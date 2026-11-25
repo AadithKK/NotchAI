@@ -59,6 +59,44 @@ final class ScreenshotService {
         return try coreGraphicsDisplays()
     }
 
+    // MARK: - Region watching
+
+    /// Display filter for polling a region: always excludes the island and every NotchAI window, so an
+    /// answer popup sitting over the region can never trigger the next capture.
+    func makeWatchFilter(
+        displayID: CGDirectDisplayID,
+        islandWindowNumber: CGWindowID,
+        additionalWindowNumbers: [CGWindowID]
+    ) async throws -> SCContentFilter {
+        guard ensureScreenRecordingPermission() else { throw ScreenshotError.permissionDenied }
+        let content = try await shareableContent()
+        let display = try resolvedDisplay(in: content, requested: displayID)
+        let excluded = excludedWindows(
+            in: content,
+            islandWindowNumber: islandWindowNumber,
+            additionalWindowNumbers: additionalWindowNumbers,
+            excludeAllAppWindows: true
+        )
+        return SCContentFilter(display: display, excludingWindows: excluded)
+    }
+
+    /// Tiny grayscale thumbnail of the region, cheap enough to poll about once a second.
+    func sampleLuminance(filter: SCContentFilter, sourceRect: CGRect) async throws -> [UInt8] {
+        let configuration = SCStreamConfiguration()
+        configuration.sourceRect = sourceRect
+        configuration.width = LuminanceSampler.side
+        configuration.height = LuminanceSampler.side
+        configuration.showsCursor = false
+        let image: CGImage
+        do {
+            image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+        } catch {
+            throw mapCaptureError(error)
+        }
+        guard let pixels = LuminanceSampler.pixels(from: image) else { throw ScreenshotError.encodingFailed }
+        return pixels
+    }
+
     // MARK: - Capture
 
     /// Captures the selected display, excluding the island and — when requested — every window this
@@ -106,6 +144,13 @@ final class ScreenshotService {
         configuration.captureResolution = .best
         configuration.showsCursor = options.includeCursor
         configuration.scalesToFit = false
+        if let rect = options.sourceRect {
+            // sourceRect is in points; the output must be sized in pixels or the region is stretched.
+            let scale = CGFloat(pixelSize.width) / CGFloat(display.width)
+            configuration.sourceRect = rect
+            configuration.width = max(1, Int((rect.width * scale).rounded()))
+            configuration.height = max(1, Int((rect.height * scale).rounded()))
+        }
 
         let image: CGImage
         do {

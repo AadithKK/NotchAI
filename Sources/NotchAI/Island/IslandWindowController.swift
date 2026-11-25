@@ -59,6 +59,9 @@ final class IslandWindowController {
     private var badgeGeneration = 0
     /// While set, the answer popup closes once the pointer and keyboard have been idle until this time.
     private var answerPopupDeadline: Date?
+    /// Persistent "Watch · MCQ" label shown beside the notch while Watch Region is armed.
+    private var watchLabel: String?
+    var onSuspend: (() -> Void)?
     nonisolated static let answerPopupIdleTimeout: TimeInterval = 20
 
     var windowNumber: CGWindowID { CGWindowID(anchorPanel.windowNumber) }
@@ -260,6 +263,16 @@ final class IslandWindowController {
         badgeHideWork?.cancel()
         badgePanel.orderOut(nil)
         badgePanel.alphaValue = 1
+        restoreWatchBadge()
+    }
+
+    func setWatchBadge(_ label: String?) {
+        watchLabel = label
+        if let label { showAnswerProgress(label) } else { hideAnswerProgress() }
+    }
+
+    private func restoreWatchBadge() {
+        if let watchLabel { showAnswerProgress(watchLabel) }
     }
 
     /// Shows a multiple-choice answer letter beside the notch without opening the island.
@@ -294,6 +307,7 @@ final class IslandWindowController {
                     guard let self, self.badgeGeneration == generation else { return }
                     self.badgePanel.orderOut(nil)
                     self.badgePanel.alphaValue = 1
+                    self.restoreWatchBadge()
                 }
             }
         }
@@ -429,6 +443,7 @@ final class IslandWindowController {
     }
 
     private func suspend() {
+        onSuspend?()
         isSuspended = true
         hoverTimer?.fireDate = .distantFuture
         dwellTracker.reset()

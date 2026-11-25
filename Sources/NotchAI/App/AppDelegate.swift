@@ -11,6 +11,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let screenshotService = ScreenshotService.shared
     private let shortcutManager = ShortcutManager()
     private let answerShortcutManager = ShortcutManager(identifier: 2)
+    private let watchShortcutManager = ShortcutManager(identifier: 3)
+    private let regionWatcher = RegionWatcher()
+    private var watchMenuItem: NSMenuItem?
+    private var watchRegistered = false
+    private var consecutiveWatchFailures = 0
 
     private var islandController: IslandWindowController?
     private var settingsWindowController: SettingsWindowController?
@@ -47,6 +52,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             browserManager: browserManager(),
             actions: actions
         )
+        islandController?.onSuspend = { [weak self] in
+            guard self?.regionWatcher.isWatching == true else { return }
+            self?.stopWatching(toast: nil)
+        }
         settingsStore.onSettingsChanged = { [weak self] settings in
             self?.apply(settings: settings)
         }
@@ -73,6 +82,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         shortcutManager.unregister()
         answerShortcutManager.unregister()
+        watchShortcutManager.unregister()
+        regionWatcher.stop()
         chatManager.stop()
         // Capture any partial stream + selection before the process exits.
         chatManager.persistNow()
@@ -234,90 +245,196 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && chatManager.pendingAttachments.isEmpty && chatManager.pendingDocuments.isEmpty
     }
 
+    private enum QuickAnswerOutcome { case answered, skipped, failed }
+
     /// An explicit shortcut press authorizes this one screenshot upload, to the selected model.
-    /// Use a fresh conversation so unrelated history and unsent attachments are never included.
+    /// All captures share one "Quick Answers" chat; each request sends only its own screenshot.
     private func captureAndAnswer() {
-        guard !quickAnswerInFlight, !captureInFlight else { return }
+        let mode = settingsStore.settings.screenshot.effectiveAnswerMode
+        Task { @MainActor in _ = await runQuickAnswer(region: nil, mode: mode, quiet: false) }
+    }
+
+    /// Shared by the shortcut (whole display) and Watch Region (a chosen rectangle, `quiet`: a busy
+    /// composer skips that change silently instead of opening the island with an error).
+    private func runQuickAnswer(region: WatchTarget?, mode: AnswerMode, quiet: Bool) async -> QuickAnswerOutcome {
+        guard !quickAnswerInFlight, !captureInFlight else { return .skipped }
         guard composerIsAvailableForQuickAnswer else {
-            showQuickAnswerError("Finish the current reply or clear your draft and attachments before using Capture & Answer.")
-            return
+            if !quiet {
+                showQuickAnswerError("Finish the current reply or clear your draft and attachments before using Capture & Answer.")
+            }
+            return .skipped
         }
         let model = settingsStore.selectedModel
         guard model.supportsImages else {
             showQuickAnswerError("Select an image-capable model before using Capture & Answer.")
-            return
+            return .failed
         }
         guard let key = settingsStore.apiKey(for: model.provider), !key.isEmpty else {
             showQuickAnswerError("Add your \(model.provider.displayName) API key in Settings first.")
-            return
+            return .failed
         }
         quickAnswerInFlight = true
+        defer { quickAnswerInFlight = false }
         islandController?.showAnswerProgress("Capturing…")
         let captureSettings = settingsStore.settings.screenshot
-        Task { @MainActor in
-            defer { quickAnswerInFlight = false }
-            do {
-                let screenshot = try await screenshotService.capture(
-                    options: CaptureOptions(
-                        displayID: captureSettings.displayID,
-                        excludeAllAppWindows: captureSettings.excludeAllAppWindows,
-                        includeCursor: false,
-                        format: captureSettings.format,
-                        saveLocally: captureSettings.saveLocally
-                    ),
-                    islandWindowNumber: islandController?.windowNumber ?? 0,
-                    additionalWindowNumbers: islandController?.additionalCaptureWindowNumbers ?? []
-                )
-                let currentModel = settingsStore.selectedModel
-                guard composerIsAvailableForQuickAnswer,
-                      currentModel.id == model.id, currentModel.provider == model.provider else {
-                    if AttachmentSanitizer.isStrictlyInside(AppPaths.temporaryCapturesDirectory, screenshot.fileURL) {
-                        try? FileManager.default.removeItem(at: screenshot.fileURL)
-                    }
+        do {
+            let screenshot = try await screenshotService.capture(
+                options: CaptureOptions(
+                    displayID: region?.displayID ?? captureSettings.displayID,
+                    excludeAllAppWindows: region != nil || captureSettings.excludeAllAppWindows,
+                    includeCursor: false,
+                    format: captureSettings.format,
+                    saveLocally: captureSettings.saveLocally,
+                    sourceRect: region?.rect
+                ),
+                islandWindowNumber: islandController?.windowNumber ?? 0,
+                additionalWindowNumbers: islandController?.additionalCaptureWindowNumbers ?? []
+            )
+            let currentModel = settingsStore.selectedModel
+            guard composerIsAvailableForQuickAnswer,
+                  currentModel.id == model.id, currentModel.provider == model.provider else {
+                if AttachmentSanitizer.isStrictlyInside(AppPaths.temporaryCapturesDirectory, screenshot.fileURL) {
+                    try? FileManager.default.removeItem(at: screenshot.fileURL)
+                }
+                if quiet {
+                    islandController?.hideAnswerProgress()
+                } else {
                     showQuickAnswerError("Chat or model changed during capture. Nothing was sent; press the shortcut again when ready.")
-                    return
                 }
-                chatManager.selectQuickAnswerConversation()
-                let answerConversationID = chatManager.selectedConversationID
-                chatManager.attach(screenshot)
-                let previousCompletion = chatManager.completionPulse
-                islandController?.showAnswerProgress("Thinking…")
-                chatManager.send(text: AnswerLetterParser.quickAnswerPrompt)
-                while chatManager.isPreparingSend || chatManager.isStreaming {
-                    try await Task.sleep(nanoseconds: 100_000_000)
-                    guard chatManager.selectedConversationID == answerConversationID else {
-                        islandController?.hideAnswerProgress()
-                        return
-                    }
-                }
+                return .skipped
+            }
+            chatManager.selectQuickAnswerConversation()
+            let answerConversationID = chatManager.selectedConversationID
+            chatManager.attach(screenshot)
+            let previousCompletion = chatManager.completionPulse
+            islandController?.showAnswerProgress("Thinking…")
+            chatManager.send(text: mode.prompt)
+            while chatManager.isPreparingSend || chatManager.isStreaming {
+                try await Task.sleep(nanoseconds: 100_000_000)
                 guard chatManager.selectedConversationID == answerConversationID else {
                     islandController?.hideAnswerProgress()
-                    return
-                }
-                let completed = chatManager.completionPulse != previousCompletion
-                let reply = chatManager.currentConversation.messages.last(where: { $0.role == .assistant && !$0.isError })?.text ?? ""
-                if completed, let letter = AnswerLetterParser.letter(in: reply) {
-                    // Multiple choice: just show the letter at the notch; the island stays closed.
-                    islandController?.showAnswerLetter(letter)
-                    return
-                }
-                // Long answer: pop the full chat open, then return to normal after 20 idle seconds.
-                islandController?.beginAnswerPopup()
-                showIsland(section: .chat)
-                if !completed {
-                    islandController?.hideAnswerProgress()
-                    if chatManager.errorMessage == nil {
-                        islandController?.viewModel.showToast("Answer stopped before completion.")
-                    }
-                }
-            } catch {
-                showQuickAnswerError(error.localizedDescription)
-                if let captureError = error as? ScreenshotError, captureError == .permissionDenied {
-                    openScreenRecordingSettings()
+                    return .skipped
                 }
             }
+            guard chatManager.selectedConversationID == answerConversationID else {
+                islandController?.hideAnswerProgress()
+                return .skipped
+            }
+            let completed = chatManager.completionPulse != previousCompletion
+            let reply = chatManager.currentConversation.messages.last(where: { $0.role == .assistant && !$0.isError })?.text ?? ""
+            if completed, mode != .frq, let letter = AnswerLetterParser.letter(in: reply) {
+                // Multiple choice: just show the letter at the notch; the island stays closed.
+                islandController?.showAnswerLetter(letter)
+                return .answered
+            }
+            // Long answer: pop the full chat open, then return to normal after 20 idle seconds.
+            islandController?.beginAnswerPopup()
+            showIsland(section: .chat)
+            if !completed {
+                islandController?.hideAnswerProgress()
+                if chatManager.errorMessage == nil {
+                    islandController?.viewModel.showToast("Answer stopped before completion.")
+                }
+                return .failed
+            }
+            return .answered
+        } catch {
+            showQuickAnswerError(error.localizedDescription)
+            if let captureError = error as? ScreenshotError, captureError == .permissionDenied {
+                openScreenRecordingSettings()
+            }
+            return .failed
         }
     }
+
+    // MARK: - Watch Region
+
+    /// One shortcut: pick a region, then every time it changes and settles it is captured and answered.
+    /// Starting is the consent; it keeps sending until stopped (same shortcut, menu, sleep or quit).
+    private func toggleWatch() {
+        if regionWatcher.isWatching {
+            stopWatching(toast: "Stopped watching.")
+            return
+        }
+        guard !quickAnswerInFlight, !captureInFlight else { return }
+        guard screenshotService.hasScreenRecordingPermission() else {
+            _ = screenshotService.requestScreenRecordingPermission()
+            showWatchToast("Allow Screen Recording for NotchAI, then try again.")
+            return
+        }
+        let model = settingsStore.selectedModel
+        guard model.supportsImages else {
+            showWatchToast("Select an image-capable model before using Watch Region.")
+            return
+        }
+        guard let key = settingsStore.apiKey(for: model.provider), !key.isEmpty else {
+            showWatchToast("Add your \(model.provider.displayName) API key in Settings first.")
+            return
+        }
+        Task { @MainActor in await beginWatching() }
+    }
+
+    private func beginWatching() async {
+        let startMode = settingsStore.settings.screenshot.effectiveAnswerMode
+        guard let picked = await RegionPicker.pick(mode: startMode) else { return }
+        guard let number = picked.screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return }
+        let target = WatchTarget(
+            displayID: number.uint32Value,
+            rect: RegionGeometry.displayLocal(rect: picked.rect, screenFrame: picked.screen.frame),
+            mode: picked.mode
+        )
+        do {
+            let filter = try await screenshotService.makeWatchFilter(
+                displayID: target.displayID,
+                islandWindowNumber: islandController?.windowNumber ?? 0,
+                additionalWindowNumbers: islandController?.additionalCaptureWindowNumbers ?? []
+            )
+            consecutiveWatchFailures = 0
+            regionWatcher.start(
+                target: target,
+                filter: filter,
+                watchedPID: picked.previousApp?.processIdentifier ?? 0,
+                isBusy: { [weak self] in
+                    guard let self else { return true }
+                    return self.quickAnswerInFlight || self.captureInFlight
+                },
+                onChange: { [weak self] in
+                    guard let self else { return }
+                    switch await self.runQuickAnswer(region: target, mode: target.mode, quiet: true) {
+                    case .answered: self.consecutiveWatchFailures = 0
+                    case .skipped: break
+                    case .failed:
+                        self.consecutiveWatchFailures += 1
+                        if self.consecutiveWatchFailures >= 3 {
+                            self.stopWatching(toast: "Stopped watching after repeated errors.")
+                        }
+                    }
+                },
+                onError: { [weak self] error in
+                    self?.stopWatching(toast: "Stopped watching: \(error.localizedDescription)")
+                }
+            )
+            islandController?.setWatchBadge("Watch · \(target.mode.title)")
+            watchMenuItem?.title = "Stop Watching"
+            showWatchToast("Watching for changes (\(target.mode.title)). Press ⌃⌥⌘6 to stop.")
+        } catch {
+            showWatchToast(error.localizedDescription)
+        }
+    }
+
+    private func stopWatching(toast: String?) {
+        regionWatcher.stop()
+        islandController?.setWatchBadge(nil)
+        watchMenuItem?.title = "Watch Region…"
+        if let toast { showWatchToast(toast) }
+    }
+
+    private func showWatchToast(_ message: String) {
+        islandController?.viewModel.expand()
+        islandController?.viewModel.showToast(message)
+    }
+
+    @objc private func toggleWatchAction() { toggleWatch() }
 
     private func showQuickAnswerError(_ message: String) {
         islandController?.hideAnswerProgress()
@@ -378,6 +495,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.recordingShortcut = true
                 self.shortcutManager.unregister()
                 self.answerShortcutManager.unregister()
+                self.watchShortcutManager.unregister()
+                self.watchRegistered = false
                 self.lastShortcut = nil
                 self.lastAnswerShortcut = nil
             }
@@ -393,6 +512,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func registerShortcutsIfNeeded(_ settings: ScreenshotSettings) {
         guard !recordingShortcut else { return }
+        if !watchRegistered {
+            watchRegistered = (try? watchShortcutManager.register(.defaultWatch) { [weak self] in
+                self?.toggleWatch()
+            }) != nil
+        }
         let answer = settings.isAnswerShortcutEnabled ? settings.effectiveAnswerShortcut : nil
         guard lastShortcut != settings.shortcut || lastAnswerShortcut != answer else { return }
         shortcutManager.unregister()
@@ -435,6 +559,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         addItem(to: menu, title: "Open NotchAI", action: #selector(openIslandChatAction))
         addItem(to: menu, title: "Capture Screen", action: #selector(captureFromMenuAction))
+        addItem(to: menu, title: "Watch Region…", action: #selector(toggleWatchAction))
+        watchMenuItem = menu.items.last
         menu.addItem(.separator())
         addItem(to: menu, title: "Settings…", action: #selector(openSettingsAction), keyEquivalent: ",")
         menu.addItem(.separator())

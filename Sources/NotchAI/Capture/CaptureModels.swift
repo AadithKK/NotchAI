@@ -20,6 +20,8 @@ struct CaptureOptions: Sendable {
     /// it; otherwise it lives in `AppPaths.temporaryCapturesDirectory` and the conversation removes it
     /// when the attachment or conversation is cleared.
     var saveLocally: Bool = false
+    /// Display-local rectangle in points (top-left origin) to capture instead of the whole display.
+    var sourceRect: CGRect?
 }
 
 /// Decides whether a freshly captured file has no owner (not attached to a chat, not kept on disk).

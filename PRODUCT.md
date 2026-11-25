@@ -27,5 +27,5 @@ light/dark appearance.
 
 ## Product truth / constraints
 - Two providers only: user-supplied DeepSeek and Gemini keys, stored in Keychain.
-- Never upload screenshots; they stay local until the user presses Send.
+- Never upload screenshots on their own; they stay local until the user presses Send, uses Capture & Answer, or deliberately starts Watch Region (which says so and shows a persistent badge).
 - No private APIs, no security bypasses; permission denials handled with clear recovery copy.

@@ -29,6 +29,7 @@ Chat, browse, drop in documents, or screenshot your screen and get the answer: a
 |---|---|
 | **Notch island** | A solid-black island that joins the camera housing, grows out of it on hover, and closes when you move away. Pin keeps it open, Esc collapses it. Works on notchless and external displays too. |
 | **Capture & Answer** | Press **⌃⌥⌘5**. NotchAI screenshots your screen (never itself) and asks your model. **Multiple-choice questions show just the answer letter** beside the notch for 3 seconds. Longer questions pop the chat open, then it tucks away after 20 idle seconds. Every capture lands in one shared **Quick Answers** chat. |
+| **Watch Region** | Press **⌃⌥⌘6**, drag a box around the question area, and pick **MCQ** or **FRQ** (Tab switches). From then on, whenever that area changes and settles, NotchAI captures just that box and answers: **MCQ** shows only the letter, **FRQ** opens a full written answer. Press ⌃⌥⌘6 again to stop. |
 | **Chat with documents** | Attach PDFs, Word files, RTF, text or code with the paperclip or by dragging them in. Text is extracted on your Mac and sent only when you press Send. |
 | **Mini browser** | Tabs, search, history, and a detachable window. |
 | **Bring your own key** | DeepSeek and Google Gemini. Paste a key once; it lives in the macOS Keychain and never touches a file. |
@@ -73,6 +74,10 @@ flowchart LR
 
 Nothing is sent until you press the shortcut, and only that one screenshot goes out.
 
+### Watch Region, safely
+
+Watch Region sends a capture of your chosen box to your AI provider **every time it changes**, so it is opt-in and visible: a "Watch · MCQ" badge stays beside the notch while it is armed. It ignores tiny flickers, waits for the page to settle, sends at most one capture every few seconds, only watches while the app you started it in is in front, and stops on sleep, after repeated errors, or when you press ⌃⌥⌘6. Each capture is billed to your own API key. Use it where your school, employer, or test rules allow it.
+
 ## Shortcuts
 
 | Shortcut | Action |
@@ -80,6 +85,7 @@ Nothing is sent until you press the shortcut, and only that one screenshot goes 
 | Hover the notch (1 s) | Open the island |
 | **⌃⌥⌘4** | Capture the screen into the chat |
 | **⌃⌥⌘5** | Capture & Answer |
+| **⌃⌥⌘6** | Start or stop Watch Region |
 | **Esc** | Collapse |
 | **⌘Return** | Send |
 

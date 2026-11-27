@@ -62,7 +62,7 @@ final class IslandWindowController {
     /// Persistent "Watch · MCQ" label shown beside the notch while Watch Region is armed.
     private var watchLabel: String?
     var onSuspend: (() -> Void)?
-    nonisolated static let answerPopupIdleTimeout: TimeInterval = 20
+    nonisolated static let answerPopupIdleTimeout: TimeInterval = 2
 
     var windowNumber: CGWindowID { CGWindowID(anchorPanel.windowNumber) }
     var contentWindowNumber: CGWindowID { CGWindowID(contentPanel.windowNumber) }
@@ -286,7 +286,6 @@ final class IslandWindowController {
     /// Keeps the full chat open for a long answer, then returns the island to normal after
     /// `answerPopupIdleTimeout` seconds without the pointer over it or any typing.
     func beginAnswerPopup() {
-        viewModel.isPinned = true
         answerPopupDeadline = Date().addingTimeInterval(Self.answerPopupIdleTimeout)
     }
 
@@ -379,7 +378,7 @@ final class IslandWindowController {
             // only for deliberate pinning, transient UI or active typing, then honor hover-away.
             let isTyping = contentPanel.isKeyWindow
                 && Date().timeIntervalSince(lastKeyboardInteraction) < 1.5
-            guard !viewModel.isPinned, !isTyping, !hasTransientUI else {
+            guard !viewModel.isPinned, !isTyping, !hasTransientUI, answerPopupDeadline == nil else {
                 outsideSince = nil
                 return
             }
@@ -395,7 +394,7 @@ final class IslandWindowController {
     private func updateAnswerPopup(location: NSPoint, insidePanel: Bool, hoverRegion: CGRect, hasTransientUI: Bool) {
         guard let deadline = answerPopupDeadline else { return }
         // The user unpinned, collapsed or left the full view: the popup no longer owns the island.
-        guard viewModel.state == .full, viewModel.isPinned else {
+        guard viewModel.state == .full, !viewModel.isPinned else {
             answerPopupDeadline = nil
             return
         }

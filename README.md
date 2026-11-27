@@ -48,6 +48,10 @@ curl -fsSL https://raw.githubusercontent.com/AadithKK/NotchAI/main/install.sh | 
 
 NotchAI downloads, installs and opens by itself. Run the same line again to update.
 
+(If you download the zip from the Releases page in a browser instead, macOS will block it the first
+time: System Settings → Privacy & Security → **Open Anyway**. Intel Macs are supported by the build
+but untested.)
+
 When macOS asks, allow **Screen Recording** (for screenshots) and **Input Monitoring** (for the
 `hh` / `jj` keys) in System Settings → Privacy & Security, then quit NotchAI and open it again.
 After an update you may need to switch those off and on again.

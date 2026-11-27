@@ -285,7 +285,9 @@ final class IslandWindowController {
 
     /// Keeps the full chat open for a long answer, then returns the island to normal after
     /// `answerPopupIdleTimeout` seconds without the pointer over it or any typing.
+    /// Call before opening the island: the popup never pins and never takes focus from the user's app.
     func beginAnswerPopup() {
+        viewModel.isPinned = false
         answerPopupDeadline = Date().addingTimeInterval(Self.answerPopupIdleTimeout)
     }
 
@@ -318,10 +320,15 @@ final class IslandWindowController {
     /// user's current app focus.
     private func setFullInteraction(_ active: Bool) {
         if active {
+            guard answerPopupDeadline == nil else { return }
             contentPanel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-        } else if contentPanel.isKeyWindow {
-            contentPanel.resignKey()
+        } else {
+            if contentPanel.isKeyWindow { contentPanel.resignKey() }
+            // Hand focus back to the user's app, unless Settings or a detached window is still open.
+            if NSApp.isActive, !NSApp.windows.contains(where: { $0.isVisible && $0.styleMask.contains(.titled) }) {
+                NSApp.deactivate()
+            }
         }
     }
 
@@ -399,12 +406,15 @@ final class IslandWindowController {
             return
         }
         let typing = Date().timeIntervalSince(lastKeyboardInteraction) < Self.answerPopupIdleTimeout
-        if insidePanel || hoverRegion.contains(location) || hasTransientUI || typing {
-            answerPopupDeadline = Date().addingTimeInterval(Self.answerPopupIdleTimeout)
-        } else if Date() >= deadline {
-            answerPopupDeadline = nil
-            viewModel.collapse()
-        }
+        let engaged = insidePanel || hoverRegion.contains(location) || hasTransientUI || typing
+        answerPopupDeadline = Self.nextAnswerPopupDeadline(deadline, engaged: engaged, now: Date())
+        if answerPopupDeadline == nil { viewModel.collapse() }
+    }
+
+    /// nil means close now; being engaged (pointer over it, typing) restarts the countdown.
+    nonisolated static func nextAnswerPopupDeadline(_ deadline: Date, engaged: Bool, now: Date) -> Date? {
+        if engaged { return now.addingTimeInterval(answerPopupIdleTimeout) }
+        return now < deadline ? deadline : nil
     }
 
     private func collapseWhenOutside(_ delay: TimeInterval) {

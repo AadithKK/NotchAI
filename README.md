@@ -37,7 +37,23 @@ Chat, browse, drop in documents, or screenshot your screen and get the answer: a
 
 ## Quick start
 
-You need an Apple Silicon Mac on **macOS 15+** and **Xcode 16+** (Swift 6). No other dependencies.
+You need a Mac on **macOS 15 or newer**. Nothing else: no Xcode, no Python, no coding.
+
+1. Open **Terminal** (press ⌘Space, type `Terminal`, press Return).
+2. Paste this line and press Return:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AadithKK/NotchAI/main/install.sh | bash
+```
+
+NotchAI downloads, installs and opens by itself. Run the same line again to update.
+
+When macOS asks, allow **Screen Recording** (for screenshots) and **Input Monitoring** (for the
+`hh` / `jj` keys) in System Settings → Privacy & Security, then quit NotchAI and open it again.
+After an update you may need to switch those off and on again.
+
+<details>
+<summary>Build it yourself instead (needs Xcode 16+)</summary>
 
 ```bash
 git clone https://github.com/AadithKK/NotchAI.git
@@ -45,6 +61,8 @@ cd NotchAI
 ./scripts/build-app.sh      # builds, signs and installs ~/Applications/NotchAI.app
 open ~/Applications/NotchAI.app
 ```
+
+</details>
 
 Then, once:
 

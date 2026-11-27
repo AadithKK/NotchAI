@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyPreviewStateIfRequested()
         installStatusItem()
         Log.app.info("NotchAI launched (agent mode)")
+        Log.app.notice("ready: screen recording=\(self.screenshotService.hasScreenRecordingPermission(), privacy: .public), api key=\(self.settingsStore.apiKey(for: self.settingsStore.selectedModel.provider)?.isEmpty == false, privacy: .public)")
     }
 
     /// Development aid: launch directly into a state for screenshot/geometry checks.
@@ -276,6 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showQuickAnswerError("Add your \(model.provider.displayName) API key in Settings first.")
             return .failed
         }
+        Log.app.notice("quick answer started with \(model.id, privacy: .public)")
         quickAnswerInFlight = true
         defer { quickAnswerInFlight = false }
         islandController?.showAnswerProgress("Capturing…")
@@ -325,12 +327,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let completed = chatManager.completionPulse != previousCompletion
             let reply = chatManager.currentConversation.messages.last(where: { $0.role == .assistant && !$0.isError })?.text ?? ""
+            Log.app.notice("quick answer finished, completed=\(completed, privacy: .public)")
             if completed, mode != .frq, let letter = AnswerLetterParser.letter(in: reply) {
                 // Multiple choice: just show the letter at the notch; the island stays closed.
                 islandController?.showAnswerLetter(letter)
                 return .answered
             }
-            // Long answer: pop the full chat open, then return to normal after 20 idle seconds.
+            // Long answer: pop the full chat open, then return to normal after 2 idle seconds.
             islandController?.beginAnswerPopup()
             showIsland(section: .chat)
             if !completed {
@@ -461,6 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showWatchToast(_ message: String) {
+        Log.app.notice("watch: \(message, privacy: .public)")
         islandController?.viewModel.expand()
         islandController?.viewModel.showToast(message)
     }
@@ -470,7 +474,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showQuickAnswerError(_ message: String) {
         islandController?.hideAnswerProgress()
         chatManager.errorMessage = message
-        islandController?.viewModel.isPinned = true
+        Log.app.notice("quick answer refused: \(message, privacy: .public)")
+        islandController?.beginAnswerPopup()
         showIsland(section: .chat)
     }
 

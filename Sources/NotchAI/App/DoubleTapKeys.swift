@@ -8,8 +8,8 @@ import AppKit
 /// After a fire, taps are ignored for `lockout` so "hhh" or key mashing cannot fire twice.
 struct DoubleTapDetector {
     var triggers: Set<String> = ["h", "j"]
-    var window: TimeInterval = 0.25
-    var idleBefore: TimeInterval = 0.6
+    var window: TimeInterval = 0.3
+    var idleBefore: TimeInterval = 0.35
     var lockout: TimeInterval = 1.0
 
     private var lastKeyTime: TimeInterval = -.infinity
@@ -41,7 +41,7 @@ final class DoubleTapMonitor {
     private var source: CFRunLoopSource?
     private var retry: Timer?
     private var detector = DoubleTapDetector()
-    private var onTrigger: ((String) -> Void)?
+    var onTrigger: ((String) -> Void)?
     private var askedForPermission = false
 
     var isInstalled: Bool { tap != nil }
@@ -71,6 +71,8 @@ final class DoubleTapMonitor {
     }
 
     private func install() -> Bool {
+        // .notice so it is persisted and readable with `log show`; no key content is ever logged.
+        Log.app.notice("double-tap install: input monitoring allowed=\(Self.hasPermission, privacy: .public)")
         if !Self.hasPermission {
             if !askedForPermission { askedForPermission = true; _ = CGRequestListenEventAccess() }
             return false
@@ -85,18 +87,23 @@ final class DoubleTapMonitor {
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
             eventsOfInterest: mask, callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else { return false }
+        ) else { Log.app.notice("double-tap install: event tap creation failed"); return false }
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
         self.tap = tap
         self.source = source
         detector = DoubleTapDetector()
-        Log.app.info("double-tap key listener installed")
+        Log.app.notice("double-tap key listener installed")
         return true
     }
 
-    private func handle(type: CGEventType, event: CGEvent) {
+    private static var isTypingInOwnTextField: Bool {
+        let app = NSApplication.shared
+        return app.isActive && app.keyWindow?.firstResponder is NSText
+    }
+
+    func handle(type: CGEventType, event: CGEvent) {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return
@@ -104,10 +111,10 @@ final class DoubleTapMonitor {
         guard type == .keyDown,
               event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
               event.flags.isDisjoint(with: [.maskCommand, .maskControl, .maskAlternate]),
-              !NSApp.isActive, // typing inside NotchAI itself is never a shortcut
+              !Self.isTypingInOwnTextField, // merely being the active app must not block the keys
               let key = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased(), key.count == 1 else { return }
         if let fired = detector.ingest(key, now: ProcessInfo.processInfo.systemUptime) {
-            Log.app.info("double-tap fired: \(fired, privacy: .public)")
+            Log.app.notice("double-tap fired: \(fired, privacy: .public)")
             onTrigger?(fired)
         }
     }

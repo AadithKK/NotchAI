@@ -12,8 +12,12 @@ cleanup() { rm -rf "$STAGE"; }
 trap cleanup EXIT
 
 echo "==> Building NotchAI ($CONFIG)"
-swift build -c "$CONFIG" --product NotchAI
-BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
+# NOTCHAI_PACKAGE=1 makes the downloadable release zip: universal, ad-hoc signed (no personal
+# certificate in the file), and it leaves the installed copy alone.
+ARCHS=()
+[[ -n "${NOTCHAI_PACKAGE:-}" ]] && ARCHS=(--arch arm64 --arch x86_64)
+swift build -c "$CONFIG" --product NotchAI ${ARCHS[@]+"${ARCHS[@]}"}
+BIN_DIR="$(swift build -c "$CONFIG" ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)"
 
 echo "==> Assembling app bundle in $STAGE"
 mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources"
@@ -68,6 +72,16 @@ fi
 # "resource fork, Finder information, or similar detritus not allowed". Sign the staged copy in a
 # plain temporary directory, then install the already-signed bundle.
 xattr -cr "$STAGED_APP" 2>/dev/null || true
+
+if [[ -n "${NOTCHAI_PACKAGE:-}" ]]; then
+  strip -x "$STAGED_APP/Contents/MacOS/NotchAI"
+  codesign --force --sign - --timestamp=none "$STAGED_APP"
+  mkdir -p "$ROOT/dist"
+  rm -f "$ROOT/dist/NotchAI.zip"
+  ditto -c -k --norsrc --noextattr --keepParent "$STAGED_APP" "$ROOT/dist/NotchAI.zip"
+  echo "==> Done: $ROOT/dist/NotchAI.zip"
+  exit 0
+fi
 
 IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/{print $2; exit}')"
 if [[ -n "${IDENTITY}" ]]; then

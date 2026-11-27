@@ -46,7 +46,7 @@ You need a Mac on **macOS 15 or newer**. Nothing else: no Xcode, no Python, no c
 curl -fsSL https://raw.githubusercontent.com/AadithKK/NotchAI/main/install.sh | bash
 ```
 
-NotchAI downloads, installs and opens by itself. Run the same line again to update.
+NotchAI downloads, installs into your **Applications** folder and opens by itself. Run the same line again to update.
 
 (If you download the zip from the Releases page in a browser instead, macOS will block it the first
 time: System Settings → Privacy & Security → **Open Anyway**. Intel Macs are supported by the build

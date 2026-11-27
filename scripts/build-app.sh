@@ -75,6 +75,13 @@ xattr -cr "$STAGED_APP" 2>/dev/null || true
 
 if [[ -n "${NOTCHAI_PACKAGE:-}" ]]; then
   strip -x "$STAGED_APP/Contents/MacOS/NotchAI"
+  # Never publish an API key: check the app and every committed or to-be-committed file.
+  KEYS='sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|AQ\.[A-Za-z0-9_-]{30,}'
+  if strings -a "$STAGED_APP/Contents/MacOS/NotchAI" | grep -qE "$KEYS" \
+    || git grep --untracked -qE "$KEYS"; then
+    echo "STOP: something that looks like an API key is in the app or the project files." >&2
+    exit 1
+  fi
   codesign --force --sign - --timestamp=none "$STAGED_APP"
   mkdir -p "$ROOT/dist"
   rm -f "$ROOT/dist/NotchAI.zip"

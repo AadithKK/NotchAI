@@ -4,7 +4,9 @@ set -euo pipefail
 
 main() {
   local url="${NOTCHAI_URL:-https://github.com/AadithKK/NotchAI/releases/latest/download/NotchAI.zip}"
-  local dest="${NOTCHAI_DIR:-$HOME/Applications}"
+  # The Applications folder Finder shows; accounts without admin rights fall back to their own.
+  local dest="${NOTCHAI_DIR:-/Applications}"
+  if [[ -z "${NOTCHAI_DIR:-}" && ! -w "$dest" ]]; then dest="$HOME/Applications"; fi
 
   [[ "$(uname -s)" == "Darwin" ]] || { echo "NotchAI only runs on a Mac."; exit 1; }
   [[ "$(sw_vers -productVersion | cut -d. -f1)" -ge 15 ]] || { echo "NotchAI needs macOS 15 or newer. Update in System Settings, then try again."; exit 1; }
@@ -21,6 +23,8 @@ main() {
   mkdir -p "$dest"
   rm -rf "$dest/NotchAI.app"
   ditto "$tmp/unpacked/NotchAI.app" "$dest/NotchAI.app"
+  # Drop the copy an earlier installer put in ~/Applications, so there is only one NotchAI.
+  if [[ -z "${NOTCHAI_DIR:-}" && "$dest" == "/Applications" ]]; then rm -rf "$HOME/Applications/NotchAI.app"; fi
   if [[ -z "${NOTCHAI_DIR:-}" ]]; then open "$dest/NotchAI.app"; fi
   echo "Done! NotchAI is in $dest. Click its menu-bar icon, then Settings > AI Providers to add your key."
 }
